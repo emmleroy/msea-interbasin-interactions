@@ -13,17 +13,163 @@ from scipy.signal import detrend
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
+import pandas as pd
 from scipy import stats
-from seam import cesm_utils
+from seam import cesm_utils, precip, nino34
 import xskillscore as xs
 import os
 import regionmask
+
+# DEFINE DIRECTORIES HERE
+GPCC_DIR = "/home/eleroy/proj-dirs/SEAM/data/ExtData/GPCC/full_v2020/"
+CRUT_DIR = "/home/eleroy/proj-dirs/SEAM/data/ExtData/CRU_TS4.06/"
+APHR_DIR = "/home/eleroy/proj-dirs/SEAM/data/ExtData/APHRODITE/"
+
+ERSST_DIR = "/home/eleroy/proj-dirs/SEAM/data/ExtData/ERSST/"
+HADIS_DIR = "/home/eleroy/proj-dirs/SEAM/data/ExtData/HadISST/"
+COBES_DIR = "/home/eleroy/proj-dirs/SEAM/data/ExtData/COBE_SST2/"
+
 
 supported_fonts: List[str] = {'Andale Mono', 'Arial', 'Arial Black',
                                'Comic Sans MS', 'Courier New', 'Georgia',
                                'Impact', 'Times New Roman', 'Trebuchet MS',
                                'Verdana', 'Webdings', 'Amiri', 'Lato', 'Roboto', 'Futura'}
 
+
+### Figure 1 ###
+def get_running_corr(array1, array2, window=13, min_periods=5, center=True):
+    """Apply a rolling correlation coefficient"""
+    s1 = pd.Series(array1)
+    s2 = pd.Series(array2)
+    corr = s1.rolling(window, min_periods=min_periods, center=center).corr(s2)
+    ds = xr.Dataset({"corr": corr.values})
+    ds["time"] = array1.time
+    clean_ds = ds.reset_index("corr").reset_coords()
+    return clean_ds
+
+
+def get_obs_precip_anomalies(source, months, detrend=False):
+    if source == "GPCC":
+        file = f'{GPCC_DIR}/precip.mon.total.0.5x0.5.v2020.nc'
+    elif source == "CRUT":
+        file = f'{CRUT_DIR}/cru_ts4.06.1901.2021.pre.dat.nc'
+    elif source == "APHR":
+        file = f'{APHR_DIR}/APHRO_MA_050deg_V1101_EXR1.1951-2015.mm_per_month.nc'
+    else: 
+        raise NotImplementedError(
+            """Source must be one of "GPCC", "CRUT", "APHRO" """)
+    ds0 = get_ds(file)
+    precip_ds = ds0.sel(time=slice("1951-01", "2015-12"))
+    precip_da = precip_ds["precip"]
+    precip_anm = (
+        precip.get_SEAM_anm_timeseries(
+            precip_da,
+            detrend=detrend,
+            base_start='1951-01',
+            base_end='2015-12',
+            monsoon_season=False,
+            monthly=True,
+        ))
+
+    precip_MAM = precip_anm.sel(time=precip_anm.time.dt.season=="MAM")
+    precip_anm = precip_MAM.resample(time="1Y").mean()
+    return precip_anm
+
+
+def get_obs_nino34_sst_anomalies(source, detrend=False):
+    if source == "ERSST":
+            file = f'{ERSST_DIR}/sst.mnmean.v5.nc'
+    elif source == "HADISST":
+        file = f'{HADIS_DIR}/HadISST_sst.nc'
+    elif source == "COBESST":
+        file = f'{COBES_DIR}/sst.mon.mean.nc'
+    else: 
+        raise NotImplementedError(
+            """Source must be one of "ERSST", "HADISST", "COBESST" """)
+    ds0 = get_ds(file)
+    sst_ds = ds0.sel(time=slice("1951-01", "2015-12"))
+    sst_da = sst_ds["sst"]
+    sst_anm_nino34_ersst = nino34.get_nino34_anm_timeseries(
+        sst_da, detrend=detrend, base_start='1951-01',
+        base_end='2015-12', filtered=True
+    )
+    sst_season = (
+        sst_anm_nino34_ersst.resample(time="QS-DEC", label="left")
+        .mean(dim='time')
+        .sel(time=slice("1951-01", "2015-12"))
+    )  # take quarterly means starting Dec 1
+    nino34_DJF_ersst = (
+        sst_season.sel(time=sst_season.time.dt.month.isin([12]))
+        .resample(time="1Y")
+        .mean()
+    )
+    return nino34_DJF_ersst
+
+
+def get_model_precip_anomalies(ds, months, detrend=False):
+    precip_ds = ds.sel(time=slice("1900-01", "2100-12"))
+    precip_da = precip_ds["PRECT"]
+    precip_anm = (
+        precip.get_SEAM_anm_timeseries(
+            precip_da,
+            detrend=detrend,
+            base_start='1951-01',
+            base_end='2015-12',
+            monsoon_season=False,
+            monthly=True,
+        ))
+    precip_anm = precip_anm.sel(time=precip_anm.time.dt.month.isin(months))
+
+    # Convert m/s to mm/month 
+    # Seconds per month (non-leap years in CESM calendar)
+    seconds_per_month = {
+        3: 31 * 24 * 60 * 60,  # March
+        4: 30 * 24 * 60 * 60,  # April
+        5: 31 * 24 * 60 * 60   # May
+    }
+
+    def convert_to_mm_per_month(group):
+        month = group.time.dt.month[0].item()  # Get the month number from the first item of the group
+        return group * 1000 * seconds_per_month[month]
+
+    # Apply conversion on grouped data
+    precip_mm_month = precip_anm.groupby('time.month').map(convert_to_mm_per_month)
+
+    precip_anm = precip_mm_month.resample(time='1Y').mean(dim='time')
+
+    return precip_anm
+
+
+def draw_correlation_timeseries(data, ax, linestyle='-', linecolor='k', legend_name='label', color='k'):
+    """simple timeseries plotting function"""
+    ax.plot(
+        data.time,
+        data.corr,
+        linestyle=linestyle,
+        color=linecolor,
+        label=legend_name,
+        linewidth=1,
+    ) 
+
+
+def draw_regression_map(reg, ax):
+    """simple regression map plotting function"""
+    im = ax.contourf(
+                    lon,
+                    lat,
+                    reg.values,
+                    cmap=cmaps.NCV_blu_red,
+                    norm=mpl.colors.CenteredNorm(),
+                    transform=ccrs.PlateCarree(),
+                    extend="both",
+                    levels=[-15, -12.5, -10, -7.5, -5, -2.5, -0.5, 0.5, 2.5, 5, 7.5, 10, 12.5, 15]
+                )
+    ax.coastlines(linewidth=0.5)
+    gl = ax.gridlines(
+        crs=ccrs.PlateCarree(), draw_labels=False, linewidth=0.1, color="gray", alpha=0.5
+    )
+    return im
+#####
 
 def set_matplotlib_font(font_family: str):
     """Set the matplotlib font family.
