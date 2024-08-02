@@ -19,6 +19,9 @@ from seam import cesm_utils, precip, nino34
 import xskillscore as xs
 import os
 import regionmask
+import cmaps
+import cartopy.crs as ccrs 
+import matplotlib as mpl 
 
 # DEFINE DIRECTORIES HERE
 GPCC_DIR = "/home/eleroy/proj-dirs/SEAM/data/ExtData/GPCC/full_v2020/"
@@ -38,14 +41,21 @@ supported_fonts: List[str] = {'Andale Mono', 'Arial', 'Arial Black',
 
 ### Figure 1 ###
 def get_running_corr(array1, array2, window=13, min_periods=5, center=True):
-    """Apply a rolling correlation coefficient"""
+    """apply a rolling correlation coefficient"""
     s1 = pd.Series(array1)
     s2 = pd.Series(array2)
     corr = s1.rolling(window, min_periods=min_periods, center=center).corr(s2)
-    ds = xr.Dataset({"corr": corr.values})
-    ds["time"] = array1.time
-    clean_ds = ds.reset_index("corr").reset_coords()
-    return clean_ds
+
+    ds = xr.Dataset(
+        data_vars=dict(
+            corr=(["time"], corr.values),
+        ),
+        coords=dict(
+            time=array1.time,
+        ),
+    )
+
+    return ds
 
 
 def get_obs_precip_anomalies(source, months, detrend=False):
@@ -140,6 +150,26 @@ def get_model_precip_anomalies(ds, months, detrend=False):
     return precip_anm
 
 
+def get_model_sst_anomalies(ds, detrend=False):
+    sst_ds = ds.sel(time=slice("1900-01", "2100-12"))
+    sst_da = sst_ds["SST"]
+    sst_anm_nino34_ersst = nino34.get_nino34_anm_timeseries(
+        sst_da, detrend=detrend, base_start='1951-01', base_end='2015-12', filtered=True
+    )
+    sst_season = (
+        sst_anm_nino34_ersst.resample(time="QS-DEC", label="left")
+        .mean(dim='time')
+        .sel(time=slice("1900-01", "2100-12"))
+    )  # take quarterly means starting Dec 1
+    nino34_DJF_ersst = (
+        sst_season.sel(time=sst_season.time.dt.month.isin([12]))
+        .resample(time="1Y")
+        .mean()
+    )
+
+    return nino34_DJF_ersst
+
+
 def draw_correlation_timeseries(data, ax, linestyle='-', linecolor='k', legend_name='label', color='k'):
     """simple timeseries plotting function"""
     ax.plot(
@@ -152,7 +182,7 @@ def draw_correlation_timeseries(data, ax, linestyle='-', linecolor='k', legend_n
     ) 
 
 
-def draw_regression_map(reg, ax):
+def draw_regression_map(reg, lon, lat, ax):
     """simple regression map plotting function"""
     im = ax.contourf(
                     lon,
