@@ -513,6 +513,14 @@ def mask_ocean(da):
     return da_new
     
 
+def mask_land(da):
+    """Mask land areas"""
+    land = regionmask.defined_regions.natural_earth_v5_0_0.land_110
+    mask = land.mask(da["lon"], da["lat"])
+    da_new = da.where(np.isnan(mask))
+    return da_new
+
+
 def get_percent_anm(da: xr.DataArray):
     """Subtract the monthly climatology from each grid cell to remove
      the seasonal cycle and compute monthly mean anomalies
