@@ -277,7 +277,7 @@ def get_ds(file_path: str, cesm=False):
         ds = ds.reindex(lat=list(reversed(ds['lat'])))
 
     # Check for negative longitude values:
-    if any(x < 0 for x in ds.lon):
+    if (ds.lon < 0).any():
         ds.coords['lon'] = (ds.coords['lon'] % 360)
         #TODO: Check if I need to reindex?
         ds = ds.sortby(ds.lon)
@@ -339,7 +339,7 @@ def get_multifile_ds_cesm(file_list: List[str], variable, chunks='auto'):
         ds = ds.reindex(lat=list(reversed(ds['lat'])))
 
     # Check for negative longitude values:
-    if any(x < 0 for x in ds.lon):
+    if (ds.lon < 0).any():
         ds.coords['lon'] = (ds.coords['lon'] % 360)
         #TODO: Check if I need to reindex?
         ds = ds.sortby(ds.lon)
@@ -400,7 +400,7 @@ def get_multifile_ds(file_list: List[str], cesm=False, chunks='auto'):
         ds = ds.reindex(lat=list(reversed(ds['lat'])))
 
     # Check for negative longitude values:
-    if any(x < 0 for x in ds.lon):
+    if (ds.lon < 0).any():
         ds.coords['lon'] = (ds.coords['lon'] % 360)
         #TODO: Check if I need to reindex?
         ds = ds.sortby(ds.lon)
@@ -428,7 +428,7 @@ def check_data_conventions(ds: Union[xr.Dataset, xr.DataArray]):
             """Latitudes must be monotonically increasing.
                Try using seam.utils.get_ds().""")
 
-    if any(x < 0 for x in ds.lon):
+    if (ds.lon < 0).any():
         raise NotImplementedError(
             """Longitudes must range from 0 to 360°.
                Try using seam.utils.get_ds().""")
