@@ -58,7 +58,7 @@ def get_running_corr(array1, array2, window=13, min_periods=5, center=True):
     return ds
 
 
-def get_obs_precip_anomalies(source, months, detrend=False):
+def get_obs_precip_anomalies(source, months=[3,4,5], detrend=False):
     if source == "GPCC":
         file = f'{GPCC_DIR}/precip.mon.total.0.5x0.5.v2020.nc'
     elif source == "CRUT":
