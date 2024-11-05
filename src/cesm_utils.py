@@ -1,33 +1,18 @@
-# ---
-# jupyter:
-#   jupytext:
-#     cell_metadata_filter: -all
-#     custom_cell_magics: kql
-#     text_representation:
-#       extension: .py
-#       format_name: percent
-#       format_version: '1.3'
-#       jupytext_version: 1.11.2
-#   kernelspec:
-#     display_name: SEAM-env
-#     language: python
-#     name: python3
-# ---
+from concurrent.futures import ProcessPoolExecutor
 
-# %%
 import numpy as np
 import pandas as pd
 import xarray as xr
 import cftime
-from seam import utils
 
-# %%
+from src import utils
+from src.inputs import CESM_PROCESSED_DATA
+
 try:
     import xesmf as xe
 except ImportError:
     xe = None
 
-# %%
 def regrid_cesm(
     ds,
     d_lon_lat_kws={"lon": 5, "lat": 5},
@@ -149,6 +134,7 @@ def regrid_cesm(
 
     return ds
 
+
 def time_set_midmonth(ds, time_name, deep=False):
     """
     Return copy of ds with values of ds[time_name] replaced with mid-month
@@ -164,6 +150,7 @@ def time_set_midmonth(ds, time_name, deep=False):
     newtime = [cftime.DatetimeNoLeap(year[i], month[i], 15) for i in range(nmonths)]
     ds[time_name] = newtime
     return ds
+
 
 def convert_mms_to_mmmonth(da):
     seconds_in_month = [2678400, 2419200, 2678400, 2592000, 2678400, 2592000, 2678400,
@@ -188,113 +175,64 @@ def convert_mms_to_mmmonth(da):
     return new_da
 
 
-def get_PRECT_da(project, ens_num, mask_and_convert=True):
-    if project=="piControl":
-        PRECT_dir = "/net/fs01/data/CESM2_projects/CESM2-CMIP6-piControl/atm/monthly_ave/PRECT/"
-        PRECT_file = f"b.e21.B1850.f09_g17.CMIP6-piControl.001.cam.h0.PRECT.{ens_num}.nc"
-        precip_ds = utils.get_ds(PRECT_dir + PRECT_file, cesm=True)
-        PRECT_da = precip_ds["PRECT"]
+def process_cesm_member(ensemble_member, file_suffix):
+    """ Open pre-processed LENS2 data of
+    a single ensemble member. Files should be in the CESM_PROCESSED_DATA directory 
+    and have filename: {ensemble_member}.{file_suffix}.nc"""
+
+    ds = xr.open_dataset(f"{CESM_PROCESSED_DATA}/{ensemble_member}.{file_suffix}.nc")
+
+    if file_suffix == "PRECT.MSEA":
+        ds =utils.get_cesm_msea_prect_anomaly_timeseries_mam(ds, months=[3,4,5], detrend_option=False)
+    if file_suffix == "SST.Nino34":
+        ds =utils.get_cesm_nino34_sst_anomaly_timeseries_djf(ds, detrend_option=False)
+
+    return ds
+
+
+def process_cesm_ensemble(ensemble_members, file_suffix):
+    """ Open pre-processed LENS2 data from all ensemble members using 
+    parallel processing. Files should be in the CESM_PROCESSED_DATA directory 
+    and have filename: {ensemble_member}.{file_suffix}.nc"""
+
+    processed_cesm_list = []
+    with ProcessPoolExecutor() as executor:
+        results = list(executor.map(process_cesm_member, ensemble_members, [file_suffix]*len(ensemble_members)))
+    for result in results:
+        processed_cesm_list.append(result)
+ 
+    processed_cesm_data = xr.concat(processed_cesm_list, dim='ensemble')
+
+    if "z_t" in processed_cesm_data.dims:
+        processed_cesm_data = processed_cesm_data.isel(z_t=0, drop=True)
+
+    return processed_cesm_data
+
+
+def calculate_cesm_runcorr(ens, window):
+    #print(f"Processing {ens}")
+    monthly_sst_da = xr.open_dataset(f"{CESM_PROCESSED_DATA}/{ens}.SST.Nino34.nc")
+    sst_anm = utils.get_cesm_nino34_sst_anomaly_timeseries_djf(monthly_sst_da, detrend_option=False)
     
-    if project=="ATL_pacemaker":
-        PRECC_dir = "/home/eleroy/proj-dirs/SEAM/data/ExtData/CESM1_ATL_pacemaker/atm/monthly_ave/PRECC/"
-        PRECC_file = f"b.e11.B20TRLENS.f09_g16.SST.restoring.NATL.1920.ens{ens_num}.cam.h0.PRECC.192001-201312.nc"
-        PRECC_ds0 = utils.get_ds(PRECC_dir + PRECC_file, cesm=True)
-        PRECC_da = PRECC_ds0["PRECC"]
-        PRECL_dir = "/home/eleroy/proj-dirs/SEAM/data/ExtData/CESM1_ATL_pacemaker/atm/monthly_ave/PRECL/"
-        PRECL_file = f"b.e11.B20TRLENS.f09_g16.SST.restoring.NATL.1920.ens{ens_num}.cam.h0.PRECL.192001-201312.nc"
-        PRECL_ds0 = utils.get_ds(PRECL_dir + PRECL_file, cesm=True)
-        PRECL_da = PRECL_ds0["PRECL"]
-        PRECT_da = PRECC_da + PRECL_da
+    prec_da = xr.open_dataset(f"{CESM_PROCESSED_DATA}/{ens}.PRECT.MSEA.nc")
+    precip_anm = utils.get_cesm_msea_prect_anomaly_timeseries_mam(prec_da, months=[3,4,5], detrend_option=False)
 
-    if project=="IOD_pacemaker":
-        # PRECC = convective precipitation
-        PRECC_dir = f"/home/eleroy/proj-dirs/SEAM/data/ExtData/CESM1_IOD_pacemaker/atm/monthly_ave/PRECC/"
-        PRECC_file1 = f"b.e11.B20TRLENS.f09_g16.SST.rstor.IOD.ens{ens_num}.cam.h0.PRECC.192001-200512.nc"
-        PRECC_file2 = f"b.e11.BRCP85LENS.f09_g16.SST.rstor.IOD.ens{ens_num}.cam.h0.PRECC.200601-201312.nc"
-        PRECC_ds_1 = utils.get_ds(PRECC_dir + PRECC_file1, cesm=True)
-        PRECC_ds_2 = utils.get_ds(PRECC_dir + PRECC_file2, cesm=True)
-        PRECC_da_1 = PRECC_ds_1["PRECC"]
-        PRECC_da_2 = PRECC_ds_2["PRECC"]
-        PRECC_da = xr.concat([PRECC_da_1, PRECC_da_2], dim='time')
-        PRECL_dir = f"/home/eleroy/proj-dirs/SEAM/data/ExtData/CESM1_IOD_pacemaker/atm/monthly_ave/PRECL/"
-        PRECL_file1 = f"b.e11.B20TRLENS.f09_g16.SST.rstor.IOD.ens{ens_num}.cam.h0.PRECL.192001-200512.nc"
-        PRECL_file2 = f"b.e11.BRCP85LENS.f09_g16.SST.rstor.IOD.ens{ens_num}.cam.h0.PRECL.200601-201312.nc"
-        PRECL_ds_1 = utils.get_ds(PRECL_dir + PRECL_file1, cesm=True)
-        PRECL_ds_2 = utils.get_ds(PRECL_dir + PRECL_file2, cesm=True)
-        PRECL_da_1 = PRECL_ds_1["PRECL"]
-        PRECL_da_2 = PRECL_ds_2["PRECL"]
-        PRECL_da = xr.concat([PRECL_da_1, PRECL_da_2], dim='time')
-        PRECT_da = PRECC_da + PRECL_da
+    #print("Getting running correlation...")
+    corr_lead = utils.get_running_corr(precip_anm, sst_anm.shift(time=1), window=window)
     
-    if project=="PAC_pacemaker":
-        # PRECC = convective precipitation
-        PRECC_dir = f"/home/eleroy/proj-dirs/SEAM/data/ExtData/CESM1_PAC_pacemaker/atm/monthly_ave/PRECC/"
-        PRECC_file1 = f"b.e11.B20TRLENS.f09_g16.SST.restoring.ens{ens_num}.cam.h0.PRECC.192001-200512.nc"
-        PRECC_file2 = f"b.e11.BRCP85LENS.f09_g16.SST.restoring.ens{ens_num}.cam.h0.PRECC.200601-201312.nc"
-        PRECC_ds_1 = utils.get_ds(PRECC_dir + PRECC_file1, cesm=True)
-        PRECC_ds_2 = utils.get_ds(PRECC_dir + PRECC_file2, cesm=True)
-        PRECC_da_1 = PRECC_ds_1["PRECC"] 
-        PRECC_da_2 = PRECC_ds_2["PRECC"]
-        PRECC_da = xr.concat([PRECC_da_1, PRECC_da_2], dim='time')
-        PRECL_dir = f"/home/eleroy/proj-dirs/SEAM/data/ExtData/CESM1_PAC_pacemaker/atm/monthly_ave/PRECL/"
-        PRECL_file1 = f"b.e11.B20TRLENS.f09_g16.SST.restoring.ens{ens_num}.cam.h0.PRECL.192001-200512.nc"
-        PRECL_file2 = f"b.e11.BRCP85LENS.f09_g16.SST.restoring.ens{ens_num}.cam.h0.PRECL.200601-201312.nc"
-        PRECL_ds_1 = utils.get_ds(PRECL_dir + PRECL_file1, cesm=True)
-        PRECL_ds_2 = utils.get_ds(PRECL_dir + PRECL_file2, cesm=True)
-        PRECL_da_1 = PRECL_ds_1["PRECL"]
-        PRECL_da_2 = PRECL_ds_2["PRECL"]
-        PRECL_da = xr.concat([PRECL_da_1, PRECL_da_2], dim='time')
-        PRECT_da = PRECC_da + PRECL_da
-
-    if mask_and_convert:
-        PRECT_da = utils.mask_ocean(PRECT_da)
-        PRECT_da = convert_mms_to_mmmonth(PRECT_da)
+    return (corr_lead, precip_anm, sst_anm)
     
-    return PRECT_da
 
-def get_SST_da(project, ens_num):
-    if project=="piControl":
-        SST_dir = "/net/fs01/data/CESM2_projects/CESM2-CMIP6-piControl/ocn/monthly_ave/SST/"
-        SST_file = f"b.e21.B1850.f09_g17.CMIP6-piControl.001.pop.h.SST.{ens_num}.nc"
-        ds = utils.get_ds(SST_dir + SST_file, cesm=True)
-        SST_da = ds["SST"].isel(z_t=0)
-        return SST_da
-
-    if project=="LENS":
-        SST_dir = "/net/fs01/data/CESM2_projects/CESM2-LE/ocn/monthly_ave/SST/"
-        SST_file = f"b.e21.BHISTsmbb.f09_g17.LE2-1301.020.pop.h.SST.199001-199912.nc"
-        ds = utils.get_ds(SST_dir + SST_file, cesm=True)
-        SST_da = ds["SST"].isel(z_t=0)
-        return SST_da
-    
-    if project=="ATL_pacemaker":
-        SST_dir = "/home/eleroy/proj-dirs/SEAM/data/ExtData/CESM1_ATL_pacemaker/ocn/monthly_ave/SST/"
-        SST_file = f"b.e11.B20TRLENS.f09_g16.SST.restoring.NATL.1920.ens{ens_num}.pop.h.SST.192001-201312.nc"
-        ds = utils.get_ds(SST_dir + SST_file, cesm=True)
-        SST_da = ds["SST"].isel(z_t=0)
-        return SST_da
-
-    if project=="IOD_pacemaker":
-        SST_dir = f"/home/eleroy/proj-dirs/SEAM/data/ExtData/CESM1_IOD_pacemaker/ocn/monthly_ave/SST/"
-        SST_file1 = f"b.e11.B20TRLENS.f09_g16.SST.rstor.IOD.ens{ens_num}.pop.h.SST.192001-200512.nc"
-        SST_file2 = f"b.e11.BRCP85LENS.f09_g16.SST.rstor.IOD.ens{ens_num}.pop.h.SST.200601-201312.nc"
-        SST_ds_1 = utils.get_ds(SST_dir + SST_file1, cesm=True)
-        SST_ds_2 = utils.get_ds(SST_dir + SST_file2, cesm=True)
-        SST_da_1 = SST_ds_1["SST"].isel(z_t=0)
-        SST_da_2 = SST_ds_2["SST"].isel(z_t=0)
-        SST_da = xr.concat([SST_da_1, SST_da_2], dim='time')
-        return SST_da
-    
-    if project=="PAC_pacemaker":
-        SST_dir = f"/home/eleroy/proj-dirs/SEAM/data/ExtData/CESM1_PAC_pacemaker/ocn/monthly_ave/SST/"
-        SST_file1 = f"b.e11.B20TRLENS.f09_g16.SST.restoring.ens{ens_num}.pop.h.SST.192001-200512.nc"
-        SST_file2 = f"b.e11.BRCP85LENS.f09_g16.SST.restoring.ens{ens_num}.pop.h.SST.200601-201312.nc"
-        SST_ds_1 = utils.get_ds(SST_dir + SST_file1, cesm=True)
-        SST_ds_2 = utils.get_ds(SST_dir + SST_file2, cesm=True)
-        SST_da_1 = SST_ds_1["SST"].isel(z_t=0)
-        SST_da_2 = SST_ds_2["SST"].isel(z_t=0)
-        SST_da = xr.concat([SST_da_1, SST_da_2], dim='time')
-
-
-        return SST_da
+def process_cesm_runcorr(members, window):
+    lead_correlations = []
+    all_precips = []
+    all_ssts = []
+    with ProcessPoolExecutor() as executor:
+        results = list(executor.map(calculate_cesm_runcorr, members, [window]*len(members)))
+    for result in results:
+        corr_lead, precip_anm, sst_anm = result
+        lead_correlations.append(corr_lead)
+        all_precips.append(precip_anm)
+        all_ssts.append(sst_anm)
+    return lead_correlations, all_precips, all_ssts
 

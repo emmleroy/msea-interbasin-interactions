@@ -85,9 +85,9 @@ def get_nino4_area(sst_da: xr.DataArray):
     return nino4_region
 
 
-def get_nino34_anm_timeseries(sst_da: xr.DataArray, detrend: bool,
+def get_nino34_anomaly_timeseries(sst_da: xr.DataArray, detrend: bool,
                         base_start: str, base_end: str,
-                          filtered=True, decadal=False):
+                          filtered=True):
     """Calculate SST anomalies in the Nino3.4 region relative to climatology.
 
     Note that the climatological period is the entire time period spanned by
@@ -106,36 +106,33 @@ def get_nino34_anm_timeseries(sst_da: xr.DataArray, detrend: bool,
         units of temperature.
 
     """
+    utils.check_data_conventions(sst_da)
 
-    # Get slice of SST data for the Nino3.4 region
+    # Select Niño3.4 region
     sst_slice = get_nino34_area(sst_da)
 
     # Detrend the data (optional)
     if detrend:
-
         # Detrend by removing timeseries of global mean SSTs
         #global_mean_ssts = utils.calc_cos_wmean(sst_da)
         #sst_slice = sst_slice-global_mean_ssts
-
         # Detrend by removing linear trend (does not work for IOB)
-        sst_slice = utils.detrend_array(sst_slice, "time", 1) 
+        sst_slice = utils.detrend_array(sst_slice, "time", 1)
 
     # Default filter: 3 month rolling mean
     if filtered:
         sst_slice = sst_slice.rolling(time=3, center=True, min_periods=1).mean()
 
     # Calculate SST anomalies by removing monthly climatology
-    # (default climatological period is the entire data period)
     sst_anm = utils.remove_monthly_clm(sst_slice, base_start, base_end)
 
     # Calculate area-weighted mean of SST anomalies
     nino34_sst_anm = utils.calc_cos_wmean(sst_anm)
 
-    # Apply 13-year Chebyshev filter (optional)
-    if decadal:
-        nino34_sst_anm = _apply_cheby1_filter(nino34_sst_anm)
-
     return nino34_sst_anm.squeeze()
+
+
+
 
 
 def get_nino4_anm_timeseries(sst_da: xr.DataArray, detrend: bool,

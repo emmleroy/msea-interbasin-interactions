@@ -1,11 +1,11 @@
 import xarray as xr
-from seam import utils
+from src import utils
 
 
-def get_SEAM_map(precip_da: xr.DataArray, detrend: bool,
-                     base_start: str, base_end: str,
-                     monthly=False, monsoon_season=True, anomaly=True):
-    """Get a large map of precipitation anomalies in the greater
+def get_SEAM_map(precip_da: xr.DataArray, monthly=False, detrend=False,
+                     base_start=None, base_end=None,
+                     anomaly=False):
+    """Get a large map of precipitation climatology (or anomalies) in the greater
     continental Southeast Asia region (larger than study area).
 
     Note: Anomalies are calculated relative to the entire climatological
@@ -35,12 +35,6 @@ def get_SEAM_map(precip_da: xr.DataArray, detrend: bool,
         lat=slice(minlat, maxlat), lon=slice(minlon, maxlon)
     )
 
-    # Select only monsoon season months (optional)
-    if monsoon_season:
-        cropped_da = cropped_da.sel(
-            time=cropped_da.time.dt.month.isin([5, 6, 7, 8, 9, 10])
-        )
-
     # Calculate GPCC anomalies relative to climatology for entire period
     if anomaly:
         anm = utils.remove_monthly_clm(cropped_da, base_start, base_end)
@@ -58,13 +52,13 @@ def get_SEAM_map(precip_da: xr.DataArray, detrend: bool,
     return anm
 
 
-def get_SEAM_anm_timeseries(precip_da: xr.DataArray, detrend: bool,
+def get_msea_anomaly_timeseries(precip_da: xr.DataArray, detrend: bool,
                             base_start: str, base_end: str,
-                            monsoon_season=True, monthly=False):
+                            monthly=False):
     """Get a timeseries of precipitation anomalies averaged over
        the continental Southeast Asia region.
 
-    Note: NEW! base start and end month must always be specified
+    Note: base start and end month must always be specified
 
     Args:
         precip_da (xr.DataArray): precipitation data (i.e. GPCC)
@@ -91,17 +85,11 @@ def get_SEAM_anm_timeseries(precip_da: xr.DataArray, detrend: bool,
         lat=slice(minlat, maxlat), lon=slice(minlon, maxlon)
     ).compute()
 
-    # Select only monsoon season months (optional)
-    if monsoon_season:
-        da = da.sel(
-            time=da.time.dt.month.isin([5, 6, 7, 8, 9, 10])
-        )
-
     # Detrend (optional)
     if detrend:
         da = utils.detrend_array(da, dim="time")
 
-    # Calculate GPCC anomalies
+    # Calculate prect anomalies by removing monthly climatology
     da = utils.remove_monthly_clm(da, base_start, base_end)
 
     # Calculate the area averaged mean
