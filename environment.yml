@@ -1,0 +1,57 @@
+name: SEAM-env                # All requirements for SEAM, plus Jupyter, IPython, and other libraries
+channels:
+    - conda-forge
+    - defaults
+dependencies:
+    - python>=3.6             # Python version 3.6
+    - cartopy>=0.17.0         # Geographic plotting toolkit
+    - ipython>=7.8.0          # IPython interpreter and tools
+    - jupyter>=1.0.0          # Jupyter federation architecture
+    - jupyterlab              # New generation Jupyter
+    - matplotlib>=3.1.1       # 2D plotting library
+    - netcdf4>=1.4.2          # Wrapper for netcdf4
+    - notebook>=6.0.0         # Notebook interface
+    - numpy>=1.19.1           # N-d array and numerics
+    - pandas>=0.25.1          # Labeled array library
+    - scipy>=1.3.1            # Common math/stats/science functions
+    - xarray>=0.15.0          # N-d labeled array library. Use older version for compatibility with xbpch
+    - regionmask>=0.9.0       # Masks of geographic regions
+    - pip>=19.2.2             # Package installer for Python
+    - black>=22.6.0           # Python code formatting
+    - black-jupyter>=22.6.0   # Python code formatter for jupyter
+    - jupyterlab_code_formatter>=1.5.1 # Another formatter
+    - shapely>=1.8.0          # For planar features
+    - basemap>=1.3.3          # Map projections
+    - dask>=2.3.0             # Parallel processing library
+    - pytest>=5.0.1           # Unit/mock testing tools
+    - seaborn>=0.11.2         # Data visualisation library
+    - isort                   # Sort imports
+    - jupyterlab-lsp>=3.10.1  # Language Server Protocol integration for JupyterLab
+    - jupyter-lsp-python>=1.5.1 # A metapackage for jupyter-lsp and python-lsp-server
+    - mscorefonts>=0.0.1       # For fonts like Arial, Courier New, Georgia, Times New Roman, Verdana
+    - open-fonts>=0.7.0       # For non-standard fonts like Amiri and Lato
+    - ffmpeg                  # for animations
+    - tqdm                    # progress bar for for-loops
+    - geocat-viz>=2022.07.0   # GeoCAT visualization
+    - xskillscore>=0.0.24  
+    - xlrd >= 1.0.0
+    - jupytext>=1.14.0        # For version control
+    - openpyxl>=3.0.10        # To open excel files with pandas
+    - windspharm>=1.7.0       # For working with wind data
+    - nc-time-axis>=1.4.1     # For making plots in matplotlib with axes made up of cftime.datetime dates with any calendar type
+    - metpy>=1.4.1
+    - xgcm>=0.8.1
+    - xesmf>=0.7.0
+    - piecewise-regression>=1.1.2 # For break-point analysis
+    - eofs
+    - pip:
+      # Other packages to search for
+        - celluloid           # For animations
+        - font-roboto
+      # Local pip-installable packages
+        - -e /home/eleroy/proj-dirs/SEAM
+        - -e /home/eleroy/lib/gcgridobj
+        - -e /home/eleroy/proj-dirs/SEAM/scripts/public_scripts/msea-interbasin-interactions
+
+
+prefix: /home/eleroy/.conda/envs/SEAM-env 
