@@ -6,7 +6,7 @@ import xarray as xr
 import cftime
 
 from src import utils
-from src.inputs import CESM_PROCESSED_DATA
+from src.inputs import *
 
 try:
     import xesmf as xe
@@ -175,12 +175,12 @@ def convert_mms_to_mmmonth(da):
     return new_da
 
 
-def process_cesm_member(ensemble_member, file_suffix):
+def process_cesm_member(ensemble_member, cesm_directory, file_suffix):
     """ Open pre-processed LENS2 data of
     a single ensemble member. Files should be in the CESM_PROCESSED_DATA directory 
     and have filename: {ensemble_member}.{file_suffix}.nc"""
 
-    ds = xr.open_dataset(f"{CESM_PROCESSED_DATA}/{ensemble_member}.{file_suffix}.nc")
+    ds = xr.open_dataset(f"{cesm_directory}/{ensemble_member}.{file_suffix}.nc")
 
     if file_suffix == "PRECT.MSEA":
         ds =utils.get_cesm_msea_prect_anomaly_timeseries_mam(ds, months=[3,4,5], detrend_option=False)
@@ -190,14 +190,19 @@ def process_cesm_member(ensemble_member, file_suffix):
     return ds
 
 
-def process_cesm_ensemble(ensemble_members, file_suffix):
+def process_cesm_ensemble(ensemble_members, cesm_directory, file_suffix):
     """ Open pre-processed LENS2 data from all ensemble members using 
     parallel processing. Files should be in the CESM_PROCESSED_DATA directory 
     and have filename: {ensemble_member}.{file_suffix}.nc"""
 
     processed_cesm_list = []
     with ProcessPoolExecutor() as executor:
-        results = list(executor.map(process_cesm_member, ensemble_members, [file_suffix]*len(ensemble_members)))
+        results = list(executor.map(
+            process_cesm_member, 
+            ensemble_members,
+            [cesm_directory]*len(ensemble_members),
+            [file_suffix]*len(ensemble_members)
+            ))
     for result in results:
         processed_cesm_list.append(result)
  
@@ -209,12 +214,12 @@ def process_cesm_ensemble(ensemble_members, file_suffix):
     return processed_cesm_data
 
 
-def calculate_cesm_runcorr(ens, window):
+def calculate_cesm_member_runcorr(ensemble_member, cesm_directory, window):
     #print(f"Processing {ens}")
-    monthly_sst_da = xr.open_dataset(f"{CESM_PROCESSED_DATA}/{ens}.SST.Nino34.nc")
+    monthly_sst_da = xr.open_dataset(f"{cesm_directory}/{ensemble_member}.SST.Nino34.nc")
     sst_anm = utils.get_cesm_nino34_sst_anomaly_timeseries_djf(monthly_sst_da, detrend_option=False)
     
-    prec_da = xr.open_dataset(f"{CESM_PROCESSED_DATA}/{ens}.PRECT.MSEA.nc")
+    prec_da = xr.open_dataset(f"{cesm_directory}/{ensemble_member}.PRECT.MSEA.nc")
     precip_anm = utils.get_cesm_msea_prect_anomaly_timeseries_mam(prec_da, months=[3,4,5], detrend_option=False)
 
     #print("Getting running correlation...")
@@ -223,16 +228,22 @@ def calculate_cesm_runcorr(ens, window):
     return (corr_lead, precip_anm, sst_anm)
     
 
-def process_cesm_runcorr(members, window):
+def calculate_cesm_ensemble_runcorr(ensemble_members, cesm_directory, window):
+    """Calculate running correlation between Niño3.4 SSTs and MSEA prect for 
+    all ensemble members in members, for a given window length."""
     lead_correlations = []
     all_precips = []
     all_ssts = []
     with ProcessPoolExecutor() as executor:
-        results = list(executor.map(calculate_cesm_runcorr, members, [window]*len(members)))
+        results = list(executor.map(
+            calculate_cesm_member_runcorr,
+            ensemble_members,
+            [cesm_directory]*len(ensemble_members),
+            [window]*len(ensemble_members),
+            ))
     for result in results:
         corr_lead, precip_anm, sst_anm = result
         lead_correlations.append(corr_lead)
         all_precips.append(precip_anm)
         all_ssts.append(sst_anm)
     return lead_correlations, all_precips, all_ssts
-

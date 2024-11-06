@@ -122,6 +122,16 @@ def check_data_conventions(ds: Union[xr.Dataset, xr.DataArray]):
                Try using seam.utils.get_ds().""")
 
 
+def load_global_sst_data(filepath):
+    """Function to load observed global SST datasets and select the common analysis period"""
+    sst_data = open_dataset(filepath)
+
+    sst_data_seasonal = sst_data.resample(time='QS-DEC', label='left').mean()
+    sst_data_djf = sst_data_seasonal.sel(time=sst_data_seasonal.time.dt.month.isin([12])).resample(time='1Y').mean()
+
+    return sst_data_djf['sst'].sel(time=slice("1951-01", "2015-12"))
+
+
 def calc_cos_wmean(da: xr.DataArray):
     """Calculate the spatial mean weighted by the cosine of the latitudes.
 
@@ -251,6 +261,21 @@ def calculate_runcorr_statistics_timeseries(obs_nino34_sst_anomalies_list, obs_m
         runcorr_min = running_correlations_da.min(dim='data_sources')
 
         return runcorr_mean, runcorr_max, runcorr_min
+
+
+def critical_r_value(window_length, confidence_level=0.90):
+    """For a given window_length, provide the critical r-value at 90 percent confidence level"""
+
+    # Calculate degrees of freedom for the given window length
+    df = window_length - 2
+    
+    # Get the critical t-value for the given confidence level and degrees of freedom
+    t_crit = stats.t.ppf(1 - (1 - confidence_level) / 2, df)
+    
+    # Calculate the critical r-value
+    r_crit = t_crit / np.sqrt(df + t_crit**2)
+    
+    return r_crit
 
 
 def regress_index_onto_field(field, index):
@@ -475,11 +500,8 @@ def select_correlation_quartiles(df, sort_by="Correlations"):
     lower_df = bottom_quartile
 
     # Create random quartile
-    if upper_df.shape[0]==lower_df.shape[0]:
-        random_df = df_sorted.sample(int(upper_df.shape[0]), random_state=42)
-    else:
-        random_df_len_upper = df_sorted.sample(int(upper_df.shape[0]), random_state=42)
-        random_df_len_lower = df_sorted.sample(int(lower_df.shape[0]), random_state=42)
+    random_df_len_upper = df_sorted.sample(int(upper_df.shape[0]), random_state=42)
+    random_df_len_lower = df_sorted.sample(int(lower_df.shape[0]), random_state=42)
 
     return upper_df, lower_df, random_df_len_upper, random_df_len_lower
 
@@ -544,8 +566,6 @@ def correct_pvals(p_val, alpha_global, method='fdr=bh'):
     return corrected_p_values
 
 
-
-
 def get_cmip6_da(file, ds_out):
     """Function to open CMIP6 data files from a particular model and
     regrid to common ds_out grid with same dimension conventions."""
@@ -589,14 +609,24 @@ def get_cmip6_da(file, ds_out):
     return da_new
 
 
+def calculate_sst_trend(da_global, dim, start_year, end_year, relative=False):
+    da_tropics = da_global.mean(dim=dim).sel(lat=slice(-23, 23)).sel(time=slice(str(start_year),str(end_year)))
+    
+    if relative == True:
+        print("relative is true")
+        da_tropics = da_tropics - da_tropics.mean(dim=['lat', 'lon'])
+    
+    da_tropics = mask_land(da_tropics)
+    da_tropics['time'] = np.arange(start_year, end_year+1, 1)
 
+    if 'ensemble' in da_tropics.dims:
+        print("ensemble in da_tropics")
+        da_tropics = da_tropics.mean(dim='ensemble')
 
+    trend = da_tropics.polyfit(dim='time', deg=1)
+    slope = trend.polyfit_coefficients.isel(degree=0)
 
-
-
-
-
-
+    return slope
 
 
 def draw_correlation_timeseries(data, ax, linestyle='-', linecolor='k', legend_name='label', color='k'):

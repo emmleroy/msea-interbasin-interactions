@@ -6,7 +6,6 @@ from datetime import datetime
 
 import pandas as pd
 import numpy as np
-import xarray as xr
 import cmaps
 import cartopy.crs as ccrs
 from cartopy.mpl.ticker import (LongitudeFormatter, LatitudeFormatter)
@@ -17,16 +16,16 @@ from matplotlib.lines import Line2D
 from shapely import geometry
 from scipy.stats import linregress 
 
-from src import utils, inputs, precip, cesm_utils, models
+from src import utils, precip, models
 from src.inputs import *
 
 ensemble_members = models.CESM2_ensemble_members # List of CESM2 Ensemble Members
 
 # Figure 1a
-def plot_msea_precipation_climatology(prect_data_source, 
-                                      fig, ax, 
-                                      season="MAM", 
-                                      cmap=cmaps.CBR_wet, 
+def plot_msea_precipation_climatology(prect_data_source,
+                                      fig, ax,
+                                      season="MAM",
+                                      cmap=cmaps.CBR_wet,
                                       levels=[0,25,50,75,100,125,150,175,200],
                                       cbar_ticks=[0, 50, 100, 150, 200]):
     """Plot climatology of observed precipitation in Mainland Southeast Asia"""
@@ -95,45 +94,12 @@ def plot_runcorr_statistics_timeseries(obs_nino34_sst_anomalies,
         obs_nino34_sst_anomalies, obs_msea_prect_anomalies, window=window
         ))
 
-    # (TODO: should create this more efficiently)
-    dates0 = np.array(['1951-12-31T00:00:00.000000000', '1952-12-31T00:00:00.000000000',
-                  '1953-12-31T00:00:00.000000000', '1954-12-31T00:00:00.000000000',
-                  '1955-12-31T00:00:00.000000000', '1956-12-31T00:00:00.000000000',
-                  '1957-12-31T00:00:00.000000000', '1958-12-31T00:00:00.000000000',
-                  '1959-12-31T00:00:00.000000000', '1960-12-31T00:00:00.000000000',
-                  '1961-12-31T00:00:00.000000000', '1962-12-31T00:00:00.000000000',
-                  '1963-12-31T00:00:00.000000000', '1964-12-31T00:00:00.000000000',
-                  '1965-12-31T00:00:00.000000000', '1966-12-31T00:00:00.000000000',
-                  '1967-12-31T00:00:00.000000000', '1968-12-31T00:00:00.000000000',
-                  '1969-12-31T00:00:00.000000000', '1970-12-31T00:00:00.000000000',
-                  '1971-12-31T00:00:00.000000000', '1972-12-31T00:00:00.000000000',
-                  '1973-12-31T00:00:00.000000000', '1974-12-31T00:00:00.000000000',
-                  '1975-12-31T00:00:00.000000000', '1976-12-31T00:00:00.000000000',
-                  '1977-12-31T00:00:00.000000000', '1978-12-31T00:00:00.000000000',
-                  '1979-12-31T00:00:00.000000000', '1980-12-31T00:00:00.000000000',
-                  '1981-12-31T00:00:00.000000000', '1982-12-31T00:00:00.000000000',
-                  '1983-12-31T00:00:00.000000000', '1984-12-31T00:00:00.000000000',
-                  '1985-12-31T00:00:00.000000000', '1986-12-31T00:00:00.000000000',
-                  '1987-12-31T00:00:00.000000000', '1988-12-31T00:00:00.000000000',
-                  '1989-12-31T00:00:00.000000000', '1990-12-31T00:00:00.000000000',
-                  '1991-12-31T00:00:00.000000000', '1992-12-31T00:00:00.000000000',
-                  '1993-12-31T00:00:00.000000000', '1994-12-31T00:00:00.000000000',
-                  '1995-12-31T00:00:00.000000000', '1996-12-31T00:00:00.000000000',
-                  '1997-12-31T00:00:00.000000000', '1998-12-31T00:00:00.000000000',
-                  '1999-12-31T00:00:00.000000000', '2000-12-31T00:00:00.000000000',
-                  '2001-12-31T00:00:00.000000000', '2002-12-31T00:00:00.000000000',
-                  '2003-12-31T00:00:00.000000000', '2004-12-31T00:00:00.000000000',
-                  '2005-12-31T00:00:00.000000000', '2006-12-31T00:00:00.000000000',
-                  '2007-12-31T00:00:00.000000000', '2008-12-31T00:00:00.000000000',
-                  '2009-12-31T00:00:00.000000000', '2010-12-31T00:00:00.000000000',
-                  '2011-12-31T00:00:00.000000000', '2012-12-31T00:00:00.000000000',
-                  '2013-12-31T00:00:00.000000000', '2014-12-31T00:00:00.000000000',
-                  '2015-12-31T00:00:00.000000000'], dtype='datetime64[ns]')
-    dates = dates0.astype('datetime64[D]').astype(datetime)
+    # Generate dates from '1951-12-31' to '2015-12-31' with an annual frequency
+    dates0 = np.arange('1951-12-31', '2016-01-01', dtype='datetime64[Y]').astype('datetime64[D]')
+    # Convert to Python datetime objects
+    dates = dates0.astype('datetime64[D]').astype(object)
 
-
-    ax.plot(
-            dates,
+    ax.plot(dates,
             runcorr_mean,
             linestyle='-',
             color='red',
@@ -157,7 +123,7 @@ def plot_runcorr_statistics_timeseries(obs_nino34_sst_anomalies,
     ax.spines['right'].set_visible(False)
 
     # Draw 90% confidence level for correlation coefficient of window length
-    crit = 0.497 # critical r-value at 90% confidence level (TO DO: this should be a function of window)
+    crit = utils.critical_r_value(window, confidence_level=0.90) # critical r-value at 90% confidence level
     ax.axhline(-crit, color="grey", linestyle='--', label=None, linewidth=0.5)
     ax.axhline(+crit, color="grey", linestyle='--', label=None, linewidth=0.5)
 
@@ -190,10 +156,13 @@ def plot_runcorr_statistics_timeseries(obs_nino34_sst_anomalies,
 
 
 # Figure 1c and 1d
-def plot_regression_map(regression_mean, sign_mask, 
-                        ax,
+def plot_regression_map(ax, regression_mean, 
+                        sign_mask=None,
                         cmap=cmaps.NCV_blu_red,
                         levels=[-15, -12.5, -10, -7.5, -5, -2.5, -0.5, 0.5, 2.5, 5, 7.5, 10, 12.5, 15]):
+    """Plot map of mean regression coefficients and (optionally) add
+    hatching where the ensemble members / data pairs agree 
+    on the sign of the regression"""
 
     # Draw filled contour plot
     im = ax.contourf(
@@ -207,7 +176,7 @@ def plot_regression_map(regression_mean, sign_mask,
                     levels=levels,
                 )
 
-    # Add hatching where the regression agree on the sign of the regression
+    # Add hatching where the data agree on the sign of the regression
     hatching = ax.pcolor(regression_mean.lon, 
                          regression_mean.lat,
                          regression_mean.where(sign_mask), 
@@ -227,14 +196,17 @@ def plot_regression_map(regression_mean, sign_mask,
     ax.set_xticks([60, 180, 300], crs=ccrs.PlateCarree())
     ax.xaxis.set_major_formatter(lon_formatter)
 
-
     return im
 
 
 # Figure 2a
-def plot_runcorr_cesm_timeseries(correlations_da, ax):
+def plot_runcorr_cesm_timeseries(correlations_da, 
+                                 ax, 
+                                 future_color="palevioletred",
+                                 forcing_label="SSP3-7.0 (2015-2100)"):
+    """Plot timeseries of running correlations from CESM2"""
 
-    for ens in range(100):
+    for ens in range(len(correlations_da.ensemble)):
         x = correlations_da['corr'].isel(ensemble=ens)
         ax.plot(
             x.time[:116],
@@ -248,14 +220,13 @@ def plot_runcorr_cesm_timeseries(correlations_da, ax):
             x.time[115:201],
             x.values[115:201],
             linestyle='-',
-            color='palevioletred',
+            color=future_color,
             alpha=0.4,
             linewidth=0.5,
         )
 
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-
 
     ensemble_mean = correlations_da['corr'].mean(dim='ensemble')
     ax.plot(
@@ -269,14 +240,16 @@ def plot_runcorr_cesm_timeseries(correlations_da, ax):
         )
 
     line1 = Line2D([0], [0], color='grey', linewidth=0.5, linestyle='-')
-    line2 = Line2D([0], [0], color='palevioletred', linewidth=0.5, linestyle='-')
+    line2 = Line2D([0], [0], color=future_color, linewidth=0.5, linestyle='-')
     line3 = Line2D([0], [0], color='k', linewidth=1, linestyle='-')
 
     plt.gca().add_patch(line1)
     plt.gca().add_patch(line2)
     plt.gca().add_patch(line3)
 
-    ax.legend([line1, line2, line3], ['Historical (1900-2014)', 'SSP3-7.0 (2015-2100)', 'Ensemble Mean'], loc='upper left', frameon=False, fontsize=6)
+    ax.legend([line1, line2, line3], 
+              ['Historical (1900-2014)', f'{forcing_label}', 'Ensemble Mean'], 
+              loc='upper left', frameon=False, fontsize=6)
 
     line1.set_visible(False)
     line2.set_visible(False)
@@ -291,6 +264,7 @@ def plot_runcorr_cesm_timeseries(correlations_da, ax):
     ax.tick_params(axis='both', which='major', labelsize=8)  # Set tick params for ax1
 
     return ax
+
 
 # Figure 2b
 def draw_pdf(data, ax, xlabel, ylabel='Probability Density'):
@@ -513,3 +487,17 @@ def plot_enso_asymmetry_scatter(ax, elnino_sst, elnino_pre, lanina_sst, lanina_p
     """Plot scatter points for El Niño and La Niña events."""
     ax.scatter(elnino_sst, elnino_pre, marker='o', edgecolors=el_color, facecolors=el_color, s=6, linewidths=0.25, alpha=1)
     ax.scatter(lanina_sst, lanina_pre, marker='o', edgecolors=la_color, facecolors=la_color, s=6, linewidths=0.25, alpha=1)
+
+# Figure 5
+def plot_sst_trends_spatial(slope, ax, num_years, levels):
+    slope = utils.mask_land(slope)
+
+    trend_plot = ax.contourf(
+        slope['lon'], slope['lat'], slope*num_years,
+        cmap=cmaps.NCV_blu_red,
+        levels=levels,
+        transform=ccrs.PlateCarree(),
+        norm=mpl.colors.CenteredNorm(),
+        extend='neither'
+    )
+    return trend_plot
