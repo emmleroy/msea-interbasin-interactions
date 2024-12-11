@@ -209,6 +209,31 @@ def get_obs_msea_prect_anomaly_timeseries_mam(prect_data_source, detrend_option=
     return msea_prect_anomaly_timeseries_mam.resample(time="1Y").mean()
 
 
+def get_obs_msea_prect_climatology_timeseries_mam(prect_data_source, detrend_option=False):
+    """Load observational prect data and calculate area-averaged timeseries 
+    of MAM climatology in the MSEA region."""
+
+    # Load observational data
+    file = prect_gridded_rain_gauge_source_to_file[prect_data_source] 
+    ds = open_dataset(file)
+    da = ds["precip"].sel(time=slice("1951-01", "2015-12"))
+
+    # Calculate anomaly timeseries
+    msea_prect_climatology_timeseries = (
+        precip.get_msea_climatology_timeseries(
+            da,
+            detrend=detrend_option,
+            monthly=True,
+        ))
+
+    # Select MAM season/months
+    msea_prect_climatology_timeseries_mam = msea_prect_climatology_timeseries.sel(
+        time=msea_prect_climatology_timeseries.time.dt.season=="MAM"
+        )
+
+    return msea_prect_climatology_timeseries_mam.resample(time="1Y").mean()
+
+
 def get_obs_nino34_sst_anomaly_timeseries_djf(sst_data_source, detrend_option=False):
     """Load observational sst data and calculate area-averaged timeseries 
     of DJF anomalies in the Niño3.4 region relative to 1951-2015 base period."""
@@ -364,6 +389,38 @@ def get_cesm_msea_prect_anomaly_timeseries_mam(ds, months, detrend_option=False)
 
     return precip_anm
 
+
+def get_cesm_msea_prect_climatology_timeseries_mam(ds, months, detrend_option=False):
+    """Calculate MSEA MAM prect from CESM-LENS2 model output.
+    Renamed from "get_model_precip_anomalies" """
+    precip_ds = ds.sel(time=slice("1900-01", "2100-12"))
+    precip_da = precip_ds["PRECT"]
+    precip_clm = (
+        precip.get_msea_climatology_timeseries(
+            precip_da,
+            detrend=detrend_option,
+            monthly=True,
+        ))
+    precip_clm = precip_clm.sel(time=precip_clm.time.dt.month.isin(months))
+
+    # Convert m/s to mm/month 
+    # Seconds per month (non-leap years in CESM calendar)
+    seconds_per_month = {
+        3: 31 * 24 * 60 * 60,  # March
+        4: 30 * 24 * 60 * 60,  # April
+        5: 31 * 24 * 60 * 60   # May
+    }
+
+    def convert_to_mm_per_month(group):
+        month = group.time.dt.month[0].item()  # Get the month number from the first item of the group
+        return group * 1000 * seconds_per_month[month]
+
+    precip_mm_month = precip_clm.groupby('time.month').map(convert_to_mm_per_month)
+    precip_clm = precip_mm_month.resample(time='1Y').mean(dim='time')
+
+    return precip_clm
+
+
 def get_cesm_nino34_sst_anomaly_timeseries_djf(ds, detrend_option=False):
     """Calculate Niño3.4 DJF SSTs from CESM-LENS2 model output.
     Renamed from "get_model_sst_anomalies". """
@@ -423,6 +480,20 @@ def get_cmip_msea_prect_anomaly_timeseries_mam(da_pr):
     precip_anm = precip_MAM.resample(time="1Y").mean()
 
     return precip_anm.sel(time=slice('1900','2014'))
+
+
+def get_cmip_msea_prect_climatology_timeseries_mam(da_pr):
+    precip_clm = (
+        precip.get_msea_climatology_timeseries(
+            da_pr,
+            detrend=False,
+            monthly=True)
+        )
+
+    precip_MAM = precip_clm.sel(time=precip_clm.time.dt.season=="MAM")
+    precip_clm = precip_MAM.resample(time="1Y").mean()
+
+    return precip_clm.sel(time=slice('1900','2014'))
 
 
 def get_running_corr(array1, array2, window=13, min_periods=5, center=True):

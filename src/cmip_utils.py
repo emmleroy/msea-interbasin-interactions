@@ -13,7 +13,7 @@ from src.inputs import *
 
 ds_out = xr.open_mfdataset(tos_files['E3SM-1-0'])
 
-def process_cmip_ensemble(model):
+def process_cmip_ensemble(model, anomaly=True):
     """Open CMIP6 data and regrid to common 1x1 gr grid.
     For each CMIP6 model, calculate MAM prect in msea region (precip_anm)
     and calculate corresponding DJF sst in Niño3.4 region (nino34_djf_ersst)"""
@@ -25,7 +25,10 @@ def process_cmip_ensemble(model):
     da_pr = ds_pr['pr'].sel(time=slice('1900','2014'))
     da_pr *= 30 * 24 * 60 * 60  # kg m-2 s-1 to mm/month
 
-    precip_anm = utils.get_cmip_msea_prect_anomaly_timeseries_mam(da_pr)
+    if anomaly==True:
+        precip_anm = utils.get_cmip_msea_prect_anomaly_timeseries_mam(da_pr)
+    else:
+        precip_anm = utils.get_cmip_msea_prect_climatology_timeseries_mam(da_pr)
     nino34_djf_ersst = utils.get_cmip_nino34_sst_anomaly_timeseries_djf(da_tos)
 
     return nino34_djf_ersst, precip_anm

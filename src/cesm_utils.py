@@ -175,7 +175,7 @@ def convert_mms_to_mmmonth(da):
     return new_da
 
 
-def process_cesm_member(ensemble_member, cesm_directory, file_suffix):
+def process_cesm_member(ensemble_member, cesm_directory, file_suffix, anomaly=True):
     """ Open pre-processed LENS2 data of
     a single ensemble member. Files should be in the CESM_PROCESSED_DATA directory 
     and have filename: {ensemble_member}.{file_suffix}.nc"""
@@ -183,14 +183,17 @@ def process_cesm_member(ensemble_member, cesm_directory, file_suffix):
     ds = xr.open_dataset(f"{cesm_directory}/{ensemble_member}.{file_suffix}.nc")
 
     if file_suffix == "PRECT.MSEA":
-        ds =utils.get_cesm_msea_prect_anomaly_timeseries_mam(ds, months=[3,4,5], detrend_option=False)
+        if anomaly==True: 
+            ds = utils.get_cesm_msea_prect_anomaly_timeseries_mam(ds, months=[3,4,5], detrend_option=False)
+        else:
+            ds = utils.get_cesm_msea_prect_climatology_timeseries_mam(ds, months=[3,4,5], detrend_option=False)
     if file_suffix == "SST.Nino34":
-        ds =utils.get_cesm_nino34_sst_anomaly_timeseries_djf(ds, detrend_option=False)
+        ds = utils.get_cesm_nino34_sst_anomaly_timeseries_djf(ds, detrend_option=False)
 
     return ds
 
 
-def process_cesm_ensemble(ensemble_members, cesm_directory, file_suffix):
+def process_cesm_ensemble(ensemble_members, cesm_directory, file_suffix, anomaly=True):
     """ Open pre-processed LENS2 data from all ensemble members using 
     parallel processing. Files should be in the CESM_PROCESSED_DATA directory 
     and have filename: {ensemble_member}.{file_suffix}.nc"""
@@ -201,7 +204,8 @@ def process_cesm_ensemble(ensemble_members, cesm_directory, file_suffix):
             process_cesm_member, 
             ensemble_members,
             [cesm_directory]*len(ensemble_members),
-            [file_suffix]*len(ensemble_members)
+            [file_suffix]*len(ensemble_members),
+            [anomaly]*len(ensemble_members),
             ))
     for result in results:
         processed_cesm_list.append(result)

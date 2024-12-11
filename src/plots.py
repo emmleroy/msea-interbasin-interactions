@@ -450,19 +450,20 @@ def plot_linregress(x, y, ax, color, linewidth=1):
     x_fit = np.linspace(np.min(x), np.max(x), 100)
     y_fit = intercept + slope * x_fit
 
-    ax.plot(x_fit, y_fit, color=color, linestyle='-', linewidth=linewidth)
+    ax.plot(x_fit, y_fit, color=color, linestyle='-', linewidth=linewidth, zorder=10)
     
     return slope
 
 
-def annotate_slope(ax, x_data, y_data, x_pos, label_color):
+def annotate_slope(ax, x_data, y_data, x_pos, label_color, label=True):
     """Plot linear regression (linear least squared) and annotate slope."""
     slope = plot_linregress(
         x_data[~np.isnan(x_data)].flatten(), 
         y_data[~np.isnan(y_data)].flatten(), 
         ax=ax, color='black'
         )
-    ax.text(x_pos, 125, f'{slope:.0f} mm/month/°C', color=label_color, fontsize=6)
+    if label==True:
+        ax.text(x_pos, 125, f'{slope:.0f} mm/month/°C', color=label_color, fontsize=6)
 
 def select_and_shift_sst(sst_data, time_shift=1, start='1951', end='2015'):
     """Shift and select SST data within a specified time range.
@@ -485,8 +486,8 @@ def filter_enso_events(precip_anm, sst_shifted):
 
 def plot_enso_asymmetry_scatter(ax, elnino_sst, elnino_pre, lanina_sst, lanina_pre, el_color='red', la_color='blue'):
     """Plot scatter points for El Niño and La Niña events."""
-    ax.scatter(elnino_sst, elnino_pre, marker='o', edgecolors=el_color, facecolors=el_color, s=6, linewidths=0.25, alpha=1)
-    ax.scatter(lanina_sst, lanina_pre, marker='o', edgecolors=la_color, facecolors=la_color, s=6, linewidths=0.25, alpha=1)
+    ax.scatter(elnino_sst, elnino_pre, marker='o', edgecolors=el_color, facecolors=el_color, s=6, linewidths=0.25, alpha=1, zorder=5)
+    ax.scatter(lanina_sst, lanina_pre, marker='o', edgecolors=la_color, facecolors=la_color, s=6, linewidths=0.25, alpha=1, zorder=5)
 
 # Figure 5
 def plot_sst_trends_spatial(slope, ax, num_years, levels):

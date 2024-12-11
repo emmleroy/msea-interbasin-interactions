@@ -102,6 +102,52 @@ def get_msea_anomaly_timeseries(precip_da: xr.DataArray, detrend: bool,
     return da
 
 
+def get_msea_climatology_timeseries(precip_da: xr.DataArray, detrend: bool,
+                            monthly=False):
+    """Get a timeseries of precipitation anomalies averaged over
+       the continental Southeast Asia region.
+
+    Note: base start and end month must always be specified
+
+    Args:
+        precip_da (xr.DataArray): precipitation data (i.e. GPCC)
+        detrend (bool): if True, remove the linear trend
+        base_start (str)  : start year and month of base period (i.e. '1951-01')
+        base_end (str)    : end year and month of base period (i.e. '2015-12')
+
+    Optional Args:
+        monthly (bool, default: False): if True, return monthly precipitation
+        anomalies, otherwise aggregate into annual values
+
+        monsoon_season (bool, default: True): if True, select only
+        May-October months
+    """
+    utils.check_data_conventions(precip_da)
+    
+    # Select MSEA region (90, 110, 10, 25)
+    maxlat = 25
+    minlat = 10
+    minlon = 90
+    maxlon = 110
+
+    da = precip_da.sel(
+        lat=slice(minlat, maxlat), lon=slice(minlon, maxlon)
+    ).compute()
+
+    # Detrend (optional)
+    if detrend:
+        da = utils.detrend_array(da, dim="time")
+
+    # Calculate the area averaged mean
+    da = utils.calc_cos_wmean(da)
+
+    # Calculate annual anomalies (optional)
+    if monthly is False:
+        da = da.resample(time='1Y').mean()
+
+    return da
+
+
 def get_SEAM_clm_timeseries(precip_da: xr.DataArray, detrend: bool,
                             monsoon_season=True, monthly=False):
     """Get a timeseries of precipitation anomalies averaged over
