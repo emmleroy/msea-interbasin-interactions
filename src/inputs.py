@@ -1,5 +1,9 @@
 """
-Contains directories and filenames for data inputs
+inputs.py
+===================================================================
+
+Contains directories and filenames. 
+
 """
 
 import os
@@ -12,7 +16,6 @@ ExtData_dir = "/home/eleroy/proj-dirs/SEAM/data/ExtData/"
 CESM2_LENS2_dir = "/home/eleroy/proj-dirs/SEAM/data/analysis_data/CESM-LE2_cropped_data/"
 CESM2_SSP245_dir = "/home/eleroy/proj-dirs/SEAM/data/analysis_data/CESM2_SSP2-4.5/"
 CESM2_SSP585_dir = "/home/eleroy/proj-dirs/SEAM/data/analysis_data/CESM2_SSP5-8.5/"
-
 
 sst_reanalysis_source_to_file = {
     "ERSST": f"{ExtData_dir}/ERSST/sst.mnmean.v5.nc",

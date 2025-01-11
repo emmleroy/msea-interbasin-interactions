@@ -1,5 +1,9 @@
 """
+plots.py
+===================================================================
+
 Plotting functions that take axes objects as inputs
+
 """
 
 from datetime import datetime

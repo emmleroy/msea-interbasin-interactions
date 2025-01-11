@@ -2,13 +2,13 @@
 cmip_utils.py
 ===================================================================
 
-Functions for dealing with cmip6 data >.< 
+Functions for dealing with cmip6 output. 
 
 """
 
 import xarray as xr
 
-from src import utils  # Assuming utils is already defined
+from src import utils
 from src.inputs import *
 
 ds_out = xr.open_mfdataset(tos_files['E3SM-1-0'])

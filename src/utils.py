@@ -1,11 +1,9 @@
 """
-SEAM Project Utility Functions
+utils.py
 ===================================================================
 
-A collection of useful functions for climate data analysis with a
-focus on modes of climate variability, teleconnections, monsoon
-rainfall.
-
+Collection of useful functions for climate data analysis with focus on
+modes of climate variability, teleconnections, and monsoon rainfall.
 """
 
 from typing import Set, Union, Pattern, List
@@ -269,32 +267,33 @@ def get_obs_nino34_sst_anomaly_timeseries_djf(sst_data_source, detrend_option=Fa
 
 def calculate_runcorr_statistics_timeseries(obs_nino34_sst_anomalies_list, obs_msea_prect_anomalies_list, 
                                                 window=13):
-        """Take as input list of unique observed Niño3.4 sst and MSEA prect anomaly timeseries and 
-        return the mean/max/min of across all unique data pairs."""
+    """Take as input list of unique observed Niño3.4 sst and MSEA prect anomaly timeseries and 
+       return the mean/max/min of across all unique data pairs."""
 
-        unique_data_pairs = itertools.product(obs_nino34_sst_anomalies_list, obs_msea_prect_anomalies_list)
+    unique_data_pairs = itertools.product(obs_nino34_sst_anomalies_list, obs_msea_prect_anomalies_list)
         
-        running_correlations = []
-        for each in unique_data_pairs:
-            running_correlation = get_running_corr(each[0].shift(time=1), each[1], window=window)
-            running_correlations.append(running_correlation.corr)
+    running_correlations = []
+    for each in unique_data_pairs:
+        running_correlation = get_running_corr(each[0].shift(time=1), each[1], window=window)
+        running_correlations.append(running_correlation.corr)
         
-        running_correlations_da = xr.concat(running_correlations, dim='data_sources')
+    running_correlations_da = xr.concat(running_correlations, dim='data_sources')
         
-        runcorr_mean = running_correlations_da.mean(dim='data_sources')
-        runcorr_max = running_correlations_da.max(dim='data_sources')
-        runcorr_min = running_correlations_da.min(dim='data_sources')
+    runcorr_mean = running_correlations_da.mean(dim='data_sources')
+    runcorr_max = running_correlations_da.max(dim='data_sources')
+    runcorr_min = running_correlations_da.min(dim='data_sources')
 
-        return runcorr_mean, runcorr_max, runcorr_min
+    return runcorr_mean, runcorr_max, runcorr_min
 
 
 def critical_r_value(window_length, confidence_level=0.90):
-    """For a given window_length, provide the critical r-value at 90 percent confidence level"""
+    """For a given window_length, provide the critical r-value
+    at a given confidence level (default 90%)."""
 
-    # Calculate degrees of freedom for the given window length
+    # Calculate dof
     df = window_length - 2
     
-    # Get the critical t-value for the given confidence level and degrees of freedom
+    # Get the critical t-value 
     t_crit = stats.t.ppf(1 - (1 - confidence_level) / 2, df)
     
     # Calculate the critical r-value
@@ -441,6 +440,7 @@ def get_cesm_nino34_sst_anomaly_timeseries_djf(ds, detrend_option=False):
     )
 
     return nino34_DJF_ersst
+
 
 def get_cmip_nino34_sst_anomaly_timeseries_djf(da_tos):
     sst_anm_nino34_ersst = (
@@ -612,7 +612,6 @@ def select_field_quartiles(field_da, dataframe_categories):
     return category_slices
 
 
-
 def correct_pvals(p_val, alpha_global, method='fdr=bh'):
     """Apply the Benjamini-Hochberg correction to correct p-values,
     accounting for multiple hypothesis testing."""
@@ -711,11 +710,7 @@ def draw_correlation_timeseries(data, ax, linestyle='-', linecolor='k', legend_n
         linewidth=1,
     )
 
-
-
 #####
-
-
 
 def crop_da(da, minlon, maxlon, minlat, maxlat):
     cropped_da = da.sel(
@@ -743,7 +738,6 @@ def get_file_list(directory_path: str, compiled_regex: Pattern):
     file_list.sort()
 
     return file_list
-
 
 
 def get_ds(file_path: str, cesm=False):
@@ -935,7 +929,6 @@ def detrend_array(da: xr.DataArray, dim: str, deg=1):
     return (da - fit) + da.mean(dim='time')
 
 
-
 def mask_ocean(da):
     """Mask ocean areas"""
     land = regionmask.defined_regions.natural_earth_v5_0_0.land_110
@@ -952,7 +945,6 @@ def mask_land(da):
     return da_new
 
 
-
 def ttest_1samp(a, popmean, dim):
     """
     TO DO: add documentation
@@ -960,8 +952,3 @@ def ttest_1samp(a, popmean, dim):
     t_val, p_val = stats.ttest_1samp(a, popmean, axis=a.get_axis_num(dim))
 
     return t_val, p_val
-
-
-
-
-

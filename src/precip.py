@@ -1,3 +1,11 @@
+"""
+precip.py
+===================================================================
+
+Functions for subsetting precipitation output in MSEA region.
+
+"""
+
 import xarray as xr
 from src import utils
 
@@ -153,8 +161,6 @@ def get_SEAM_clm_timeseries(precip_da: xr.DataArray, detrend: bool,
     """Get a timeseries of precipitation anomalies averaged over
        the continental Southeast Asia region.
 
-    Note: NEW! base start and end month must always be specified
-
     Args:
         precip_da (xr.DataArray): precipitation data (i.e. GPCC)
         detrend (bool): if True, remove the linear trend
@@ -163,7 +169,7 @@ def get_SEAM_clm_timeseries(precip_da: xr.DataArray, detrend: bool,
 
     Optional Args:
         monthly (bool, default: False): if True, return monthly precipitation
-        anomalies, otherwise aggregate into annual values
+        climatology, otherwise aggregate into annual values
 
         monsoon_season (bool, default: True): if True, select only
         May-October months
@@ -189,9 +195,6 @@ def get_SEAM_clm_timeseries(precip_da: xr.DataArray, detrend: bool,
     # Detrend (optional)
     if detrend:
         da = utils.detrend_array(da, dim="time")
-
-    # Calculate GPCC anomalies
-    #da = utils.remove_monthly_clm(da, base_start, base_end)
 
     # Calculate the area averaged mean
     da = utils.calc_cos_wmean(da)

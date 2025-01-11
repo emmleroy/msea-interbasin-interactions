@@ -1,6 +1,9 @@
-# 
 """
+ttp.py
+===================================================================
+
 Functions to calculate tropical interbasin interaction index (TTP)
+
 """
 
 import numpy as np

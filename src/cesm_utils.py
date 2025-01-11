@@ -1,3 +1,11 @@
+"""
+cesm_utils.py
+===================================================================
+
+Functions for dealing with CESM large ensemble output. 
+
+"""
+
 from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
@@ -153,23 +161,17 @@ def time_set_midmonth(ds, time_name, deep=False):
 
 
 def convert_mms_to_mmmonth(da):
+    """Convert xr.DataArray precip in mm/s to mm/month for CESM's 365-day no leap calendar."""
+
     seconds_in_month = [2678400, 2419200, 2678400, 2592000, 2678400, 2592000, 2678400,
         2678400, 2592000, 2678400, 2592000, 2678400]
-
-    # Create a pandas DatetimeIndex object with month frequency for the years 2000-2011
     time_index = pd.date_range('2000-01', '2001-01', freq='M')
-
-    # Create an xarray DataArray with the seconds_in_month data and time_index as coordinates
     seconds_in_month_da = xr.DataArray(seconds_in_month, dims='time', coords={'time': time_index})
 
-    # Rename the coordinates to use month numbers instead of names
     seconds_in_month_da = seconds_in_month_da.rename({'time': 'month'})
     seconds_in_month_da['month'] = np.arange(1, 13)
 
-    # Multiply m/s by s/month
     new_da0 = da.groupby('time.month')*seconds_in_month_da
-
-    # Multiply m by mm/m
     new_da = new_da0*1000
 
     return new_da
@@ -219,6 +221,9 @@ def process_cesm_ensemble(ensemble_members, cesm_directory, file_suffix, anomaly
 
 
 def calculate_cesm_member_runcorr(ensemble_member, cesm_directory, window):
+    """Calculate running correlation between Niño3.4 and MSEA prect for 
+    a single ensemble member, for a given window length."""
+    
     #print(f"Processing {ens}")
     monthly_sst_da = xr.open_dataset(f"{cesm_directory}/{ensemble_member}.SST.Nino34.nc")
     sst_anm = utils.get_cesm_nino34_sst_anomaly_timeseries_djf(monthly_sst_da, detrend_option=False)
