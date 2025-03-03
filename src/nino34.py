@@ -6,13 +6,13 @@ These functions calculate the Nino3.4 Index for the El Nino -
 Southern Oscillation (ENSO) based on monthly global SST data. 
 
 """
+import copy
 
-import xarray as xr
+from datetime import timedelta
 import numpy as np
 import pandas as pd
-from datetime import timedelta
-import copy
 from scipy import signal
+import xarray as xr
 
 from src import utils
 

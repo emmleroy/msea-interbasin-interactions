@@ -11,7 +11,7 @@ import xarray as xr
 from src import utils
 from src.inputs import *
 
-ds_out = xr.open_mfdataset(tos_files['E3SM-1-0'])
+ds_out = xr.open_mfdataset(tos_files['E3SM-1-0']) # 1x1 gr grid
 
 def process_cmip_ensemble(model, anomaly=True):
     """Open CMIP6 data and regrid to common 1x1 gr grid.

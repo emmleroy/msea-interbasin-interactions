@@ -6,28 +6,24 @@ Collection of useful functions for climate data analysis with focus on
 modes of climate variability, teleconnections, and monsoon rainfall.
 """
 
-from typing import Set, Union, Pattern, List
-from scipy.signal import detrend
-from statsmodels.stats.multitest import multipletests
-import xesmf as xe 
+import itertools
+import os
+import random
+from typing import Union, Pattern, List
 
+import gcgridobj
 import matplotlib.pyplot as plt
 import numpy as np
-import xarray as xr
 import pandas as pd
+import regionmask
 from scipy import stats
-from scipy.stats import linregress 
+from statsmodels.stats.multitest import multipletests
+import xarray as xr
+import xesmf as xe
+
 from src.inputs import *
 from src import cesm_utils, precip, nino34
-import xskillscore as xs
-import os
-import regionmask
-import cmaps
-import cartopy.crs as ccrs 
-import matplotlib as mpl 
-import itertools
-import gcgridobj
-import random
+
 random.seed(42)
 
 supported_fonts: List[str] = {'Andale Mono', 'Arial', 'Arial Black',
@@ -47,6 +43,26 @@ def set_matplotlib_font(font_family: str):
     #assert font_family in supported_fonts, f'Font {font_family} not supported.'
     plt.rcParams['font.family'] = font_family
     plt.rcParams.update({'mathtext.default': 'regular'})
+
+
+def get_file_list(directory_path: str, compiled_regex: Pattern):
+    """Return a list of file paths in a directory matching the regex pattern.
+    Args:
+        directory_path (str): path to directory where to look for files
+        compiled_regex (pattern): compiled regex pattern to match
+    Returns:
+        file_list (list[str]): list of file paths
+    """
+
+    file_list = []
+    for file_name in os.listdir(directory_path):
+        if compiled_regex.match(file_name):
+            file_list.append(os.path.join(directory_path, file_name))
+
+    # Important!!! Sort to concatenate chronologically
+    file_list.sort()
+
+    return file_list
 
 
 def open_dataset(file_path: str, cesm=False):
@@ -91,6 +107,128 @@ def open_dataset(file_path: str, cesm=False):
         ds.coords['lon'] = (ds.coords['lon'] % 360)
         ds = ds.sortby(ds.lon)
 
+    return ds
+
+
+def get_multifile_ds(file_list: List[str], cesm=False, chunks='auto'):
+    """Open multiple files as a single dataset.
+    WARNING: compatibility checks are overrided for speed-up!
+    Args:
+        file_list (list(str): list of file paths
+    Returns:
+        ds (xr.DataSet): a single concatenated xr.Dataset
+    """
+
+    v = xr.__version__.split(".")
+
+    if int(v[0]) == 0 and int(v[1]) >= 15:
+        ds = xr.open_mfdataset(file_list,
+                               combine='nested',
+                               concat_dim='time',
+                               chunks=chunks,
+                               parallel=True,
+                               data_vars='minimal',
+                               coords='minimal',
+                               compat='override')
+    else:
+        ds = xr.open_mfdataset(file_list,
+                              combine='nested',
+                               concat_dim='time',
+                               parallel=True,
+                               data_vars='minimal',
+                               coords='minimal',
+                               compat='override',
+                              engine='netcdf4')
+
+    # Check name of coordinates:
+    if 'latitude' in ds.dims and 'longitude' in ds.dims:
+        ds = ds.rename({'longitude': 'lon', 'latitude': 'lat'})
+    elif 'nlat' in ds.dims and 'nlon' in ds.dims:
+        ds = cesm_utils.regrid_cesm(
+                    ds,
+                    d_lon_lat_kws={"lon": 1, "lat": 1},
+                    method="bilinear",
+                    periodic=False,
+                    filename=None,
+                    reuse_weights=None,
+                    tsmooth_kws=None,
+                    how=None,
+                )
+    if 'pre' in ds.keys():
+        ds = ds.rename({'pre': 'precip'})
+    if cesm:
+        ds = cesm_utils.time_set_midmonth(ds, 'time', deep=False)
+    # Check if latitudes are monotonically increasing:
+    if np.all(np.diff(ds.lat) < 0):
+        ds = ds.reindex(lat=list(reversed(ds['lat'])))
+
+    # Check for negative longitude values:
+    if (ds.lon < 0).any():
+        ds.coords['lon'] = (ds.coords['lon'] % 360)
+        #TODO: Check if I need to reindex?
+        ds = ds.sortby(ds.lon)
+        
+    return ds
+
+
+def get_multifile_ds_cesm(file_list: List[str], variable, chunks='auto'):
+    """Open multiple files as a single dataset.
+    WARNING: compatibility checks are overrided for speed-up!
+    Args:
+        file_list (list(str): list of file paths
+    Returns:
+        ds (xr.DataSet): a single concatenated xr.Dataset
+    """
+
+    v = xr.__version__.split(".")
+
+    if int(v[0]) == 0 and int(v[1]) >= 15:
+        ds = xr.open_mfdataset(file_list,
+                               combine='nested',
+                               concat_dim='time',
+                               chunks=chunks,
+                               parallel=True,
+                               data_vars='minimal',
+                               coords='minimal',
+                               compat='override')
+    else:
+        ds = xr.open_mfdataset(file_list,
+                              combine='nested',
+                               concat_dim='time',
+                               parallel=True,
+                               data_vars='minimal',
+                               coords='minimal',
+                               compat='override',
+                              engine='netcdf4')
+
+    ds = ds[variable].to_dataset()
+
+    # Check name of coordinates:
+    if 'latitude' in ds.dims and 'longitude' in ds.dims:
+        ds = ds.rename({'longitude': 'lon', 'latitude': 'lat'})
+    elif 'nlat' in ds.dims and 'nlon' in ds.dims:
+        ds = cesm_utils.regrid_cesm(
+                    ds,
+                    d_lon_lat_kws={"lon": 1, "lat": 1},
+                    method="bilinear",
+                    periodic=False,
+                    filename=None,
+                    reuse_weights=None,
+                    tsmooth_kws=None,
+                    how=None,
+                )
+    if 'pre' in ds.keys():
+        ds = ds.rename({'pre': 'precip'})
+    ds = cesm_utils.time_set_midmonth(ds, 'time', deep=False)
+    # Check if latitudes are monotonically increasing:
+    if np.all(np.diff(ds.lat) < 0):
+        ds = ds.reindex(lat=list(reversed(ds['lat'])))
+
+    # Check for negative longitude values:
+    if (ds.lon < 0).any():
+        ds.coords['lon'] = (ds.coords['lon'] % 360)
+        ds = ds.sortby(ds.lon)
+        
     return ds
 
 
@@ -325,7 +463,7 @@ def regress_index_list_onto_field_list(field_list, index_list):
 
 
 def regrid_observed_ssts_to_cesm_grid(obs_global_sst_climatology_list, cesm_da):
-    """Take as input a list of observed global SSTs and regrid to CESM grid"""
+    """Take as input a list of observed global SSTs and regrid to CESM grid."""
     
     # Define destination grid
     dst_dataset = cesm_da.to_dataset(name='cesm')
@@ -358,7 +496,7 @@ def regrid_observed_ssts_to_cesm_grid(obs_global_sst_climatology_list, cesm_da):
 
 def get_cesm_msea_prect_anomaly_timeseries_mam(ds, months, detrend_option=False):
     """Calculate MSEA MAM prect from CESM-LENS2 model output.
-    Renamed from "get_model_precip_anomalies" """
+    Renamed from "get_model_precip_anomalies"."""
     precip_ds = ds.sel(time=slice("1900-01", "2100-12"))
     precip_da = precip_ds["PRECT"]
     precip_anm = (
@@ -391,7 +529,7 @@ def get_cesm_msea_prect_anomaly_timeseries_mam(ds, months, detrend_option=False)
 
 def get_cesm_msea_prect_climatology_timeseries_mam(ds, months, detrend_option=False):
     """Calculate MSEA MAM prect from CESM-LENS2 model output.
-    Renamed from "get_model_precip_anomalies" """
+    Renamed from "get_model_precip_anomalies"."""
     precip_ds = ds.sel(time=slice("1900-01", "2100-12"))
     precip_da = precip_ds["PRECT"]
     precip_clm = (
@@ -497,7 +635,7 @@ def get_cmip_msea_prect_climatology_timeseries_mam(da_pr):
 
 
 def get_running_corr(array1, array2, window=13, min_periods=5, center=True):
-    """apply a rolling correlation coefficient"""
+    """Apply a rolling correlation coefficient."""
     s1 = pd.Series(array1)
     s2 = pd.Series(array2)
     corr = s1.rolling(window, min_periods=min_periods, center=center).corr(s2)
@@ -583,7 +721,7 @@ def select_field_quartiles(field_da, dataframe_categories):
     Categories are dataframes that contain a list of ensemble members ("Members")
     and a list of start years for the 13-year periods("Years")
     
-    Parameters:
+    Args:
         field_da (xarray.DataArray): the DataArray containing fields.
         dataframe_categories (list of pd.DataFrame): List containing dataframes for
                                                      each category.
@@ -680,6 +818,21 @@ def get_cmip6_da(file, ds_out):
 
 
 def calculate_sst_trend(da_global, dim, start_year, end_year, relative=False):
+    """Calculate the linear trend of sea surface temperature (SST) in the tropics 
+    (between -23°S and +23°N).
+    
+    Args:
+        da_global : xarray.DataArray
+        dim : dimension to average over before calculating trend 
+        ("ensemble" (for CESM-LE2) or "datasets" (for observations))
+        start_year : start year for the trend calculation.
+        end_year : end year for the trend calculation.
+        relative : if true, remove the tropical-mean trend first
+
+    Returns:
+        slope : linear trend (slope) of SST in the tropics over the specified time period.
+    """
+
     da_tropics = da_global.mean(dim=dim).sel(lat=slice(-23, 23)).sel(time=slice(str(start_year),str(end_year)))
     
     if relative == True:
@@ -700,7 +853,7 @@ def calculate_sst_trend(da_global, dim, start_year, end_year, relative=False):
 
 
 def draw_correlation_timeseries(data, ax, linestyle='-', linecolor='k', legend_name='label', color='k'):
-    """simple timeseries plotting function"""
+    """Simple timeseries plotting function."""
     ax.plot(
         data.time,
         data.corr,
@@ -709,203 +862,6 @@ def draw_correlation_timeseries(data, ax, linestyle='-', linecolor='k', legend_n
         label=legend_name,
         linewidth=1,
     )
-
-#####
-
-def crop_da(da, minlon, maxlon, minlat, maxlat):
-    cropped_da = da.sel(
-        lat=slice(minlat, maxlat),
-        lon=slice(minlon, maxlon),
-    )
-    return cropped_da
-
-
-def get_file_list(directory_path: str, compiled_regex: Pattern):
-    """Return a list of file paths in a directory matching the regex pattern.
-    Args:
-        directory_path (str): path to directory where to look for files
-        compiled_regex (pattern): compiled regex pattern to match
-    Returns:
-        file_list (list[str]): list of file paths
-    """
-
-    file_list = []
-    for file_name in os.listdir(directory_path):
-        if compiled_regex.match(file_name):
-            file_list.append(os.path.join(directory_path, file_name))
-
-    # Important!!! Sort to concatenate chronologically
-    file_list.sort()
-
-    return file_list
-
-
-def get_ds(file_path: str, cesm=False):
-    """Open geospatial data and convert to the following conventions:
-
-    - rename "latitude/longitude" coordinates to "lat/lon"
-    - convert decreasing lats (90 to -90) to increasing (-90 to 90)
-    - convert negative lons (-180 to 180) to positive (0-360)
-
-    Args:
-        file_path (str) : full path to geospatial data
-
-    """
-
-    ds = xr.open_dataset(file_path)
-
-    # Check name of coordinates:
-    if 'latitude' in ds.dims and 'longitude' in ds.dims:
-        ds = ds.rename({'longitude': 'lon', 'latitude': 'lat'})
-    elif 'nlat' in ds.dims and 'nlon' in ds.dims:
-        ds = cesm_utils.regrid_cesm(
-                    ds,
-                    d_lon_lat_kws={"lon": 1, "lat": 1},
-                    method="bilinear",
-                    periodic=False,
-                    filename=None,
-                    reuse_weights=None,
-                    tsmooth_kws=None,
-                    how=None,
-                )
-    if 'pre' in ds.keys():
-        ds = ds.rename({'pre': 'precip'})
-    if cesm:
-        ds = cesm_utils.time_set_midmonth(ds, 'time', deep=False)
-    # Check if latitudes are monotonically increasing:
-    if np.all(np.diff(ds.lat) < 0):
-        ds = ds.reindex(lat=list(reversed(ds['lat'])))
-
-    # Check for negative longitude values:
-    if (ds.lon < 0).any():
-        ds.coords['lon'] = (ds.coords['lon'] % 360)
-        #TODO: Check if I need to reindex?
-        ds = ds.sortby(ds.lon)
-
-    return ds
-
-
-def get_multifile_ds_cesm(file_list: List[str], variable, chunks='auto'):
-    """Open multiple files as a single dataset.
-    WARNING: compatibility checks are overrided for speed-up!
-    Args:
-        file_list (list(str): list of file paths
-    Returns:
-        ds (xr.DataSet): a single concatenated xr.Dataset
-    """
-
-    v = xr.__version__.split(".")
-
-    if int(v[0]) == 0 and int(v[1]) >= 15:
-        ds = xr.open_mfdataset(file_list,
-                               combine='nested',
-                               concat_dim='time',
-                               chunks=chunks,
-                               parallel=True,
-                               data_vars='minimal',
-                               coords='minimal',
-                               compat='override')
-    else:
-        ds = xr.open_mfdataset(file_list,
-                              combine='nested',
-                               concat_dim='time',
-                               parallel=True,
-                               data_vars='minimal',
-                               coords='minimal',
-                               compat='override',
-                              engine='netcdf4')
-
-    ds = ds[variable].to_dataset()
-
-    # Check name of coordinates:
-    if 'latitude' in ds.dims and 'longitude' in ds.dims:
-        ds = ds.rename({'longitude': 'lon', 'latitude': 'lat'})
-    elif 'nlat' in ds.dims and 'nlon' in ds.dims:
-        ds = cesm_utils.regrid_cesm(
-                    ds,
-                    d_lon_lat_kws={"lon": 1, "lat": 1},
-                    method="bilinear",
-                    periodic=False,
-                    filename=None,
-                    reuse_weights=None,
-                    tsmooth_kws=None,
-                    how=None,
-                )
-    if 'pre' in ds.keys():
-        ds = ds.rename({'pre': 'precip'})
-    ds = cesm_utils.time_set_midmonth(ds, 'time', deep=False)
-    # Check if latitudes are monotonically increasing:
-    if np.all(np.diff(ds.lat) < 0):
-        ds = ds.reindex(lat=list(reversed(ds['lat'])))
-
-    # Check for negative longitude values:
-    if (ds.lon < 0).any():
-        ds.coords['lon'] = (ds.coords['lon'] % 360)
-        #TODO: Check if I need to reindex?
-        ds = ds.sortby(ds.lon)
-        
-    return ds
-
-
-def get_multifile_ds(file_list: List[str], cesm=False, chunks='auto'):
-    """Open multiple files as a single dataset.
-    WARNING: compatibility checks are overrided for speed-up!
-    Args:
-        file_list (list(str): list of file paths
-    Returns:
-        ds (xr.DataSet): a single concatenated xr.Dataset
-    """
-
-    v = xr.__version__.split(".")
-
-    if int(v[0]) == 0 and int(v[1]) >= 15:
-        ds = xr.open_mfdataset(file_list,
-                               combine='nested',
-                               concat_dim='time',
-                               chunks=chunks,
-                               parallel=True,
-                               data_vars='minimal',
-                               coords='minimal',
-                               compat='override')
-    else:
-        ds = xr.open_mfdataset(file_list,
-                              combine='nested',
-                               concat_dim='time',
-                               parallel=True,
-                               data_vars='minimal',
-                               coords='minimal',
-                               compat='override',
-                              engine='netcdf4')
-
-    # Check name of coordinates:
-    if 'latitude' in ds.dims and 'longitude' in ds.dims:
-        ds = ds.rename({'longitude': 'lon', 'latitude': 'lat'})
-    elif 'nlat' in ds.dims and 'nlon' in ds.dims:
-        ds = cesm_utils.regrid_cesm(
-                    ds,
-                    d_lon_lat_kws={"lon": 1, "lat": 1},
-                    method="bilinear",
-                    periodic=False,
-                    filename=None,
-                    reuse_weights=None,
-                    tsmooth_kws=None,
-                    how=None,
-                )
-    if 'pre' in ds.keys():
-        ds = ds.rename({'pre': 'precip'})
-    if cesm:
-        ds = cesm_utils.time_set_midmonth(ds, 'time', deep=False)
-    # Check if latitudes are monotonically increasing:
-    if np.all(np.diff(ds.lat) < 0):
-        ds = ds.reindex(lat=list(reversed(ds['lat'])))
-
-    # Check for negative longitude values:
-    if (ds.lon < 0).any():
-        ds.coords['lon'] = (ds.coords['lon'] % 360)
-        #TODO: Check if I need to reindex?
-        ds = ds.sortby(ds.lon)
-        
-    return ds
 
 
 def detrend_array(da: xr.DataArray, dim: str, deg=1):
@@ -929,16 +885,8 @@ def detrend_array(da: xr.DataArray, dim: str, deg=1):
     return (da - fit) + da.mean(dim='time')
 
 
-def mask_ocean(da):
-    """Mask ocean areas"""
-    land = regionmask.defined_regions.natural_earth_v5_0_0.land_110
-    mask = land.mask(da["lon"], da["lat"])
-    da_new = da.where(~np.isnan(mask))
-    return da_new
-    
-
 def mask_land(da):
-    """Mask land areas"""
+    """Mask land areas in the given DataArray using the Natural Earth land mask."""
     land = regionmask.defined_regions.natural_earth_v5_0_0.land_110
     mask = land.mask(da["lon"], da["lat"])
     da_new = da.where(np.isnan(mask))
@@ -947,8 +895,18 @@ def mask_land(da):
 
 def ttest_1samp(a, popmean, dim):
     """
-    TO DO: add documentation
+    Perform a one-sample t-test along the specified dimension. This wraps 
+    `scipy.stats.ttest_1samp` and applies it along the specified dimension 
+    of the input array.
+
+    Args:
+        a : xarray.DataArray 
+        popmean : population mean
+        dim : name of the dimension along which to perform the t-test
+        
+    Returns:
+        t_val : the t-statistic for the test.
+        p_val : p-value
     """
     t_val, p_val = stats.ttest_1samp(a, popmean, axis=a.get_axis_num(dim))
-
     return t_val, p_val

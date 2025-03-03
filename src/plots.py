@@ -20,7 +20,7 @@ from matplotlib.lines import Line2D
 from shapely import geometry
 from scipy.stats import linregress 
 
-from src import utils, precip, models
+from src import models, precip, utils
 from src.inputs import *
 
 ensemble_members = models.CESM2_ensemble_members # List of CESM2 Ensemble Members
@@ -377,6 +377,7 @@ def draw_quartile_anomalies(data, fig, ax, p_val,
     return im
 
 
+################################################################################
 # Helper Functions for Figure 3
 def add_quiver(ax, diff_u, diff_v):
     skip = (slice(None, None, 8), slice(None, None, 8))
@@ -391,7 +392,6 @@ def add_quiver(ax, diff_u, diff_v):
     )
     return q
 
-
 def plot_sst_wind(ax, diff_sst, diff_u, diff_v):
     sst_levels = np.linspace(-0.5, 0.5, 21)
     im = ax.contourf(
@@ -403,7 +403,6 @@ def plot_sst_wind(ax, diff_sst, diff_u, diff_v):
     q = add_quiver(ax, diff_u, diff_v)
     return im, q
 
-
 def add_rectangles(ax):
     regions = [
         {'minx': 50, 'maxx': 70, 'miny': -10, 'maxy': 10},    # Tropial West Indian Ocean
@@ -414,7 +413,6 @@ def add_rectangles(ax):
         geom = geometry.box(**region)
         ax.add_geometries([geom], crs=ccrs.PlateCarree(), edgecolor='k', facecolor='none', linewidth=0.5)
 
-
 def plot_omega(ax, diff_omega):
     ax.invert_yaxis()
     diff_omega = diff_omega.sel(lon=slice(30, 240), lev=slice(100, 1000))
@@ -424,7 +422,6 @@ def plot_omega(ax, diff_omega):
         extend="both", levels=np.arange(-6, 7, 1)
     )
     return om
-
 
 def plot_prect_tmq(ax, diff_prect, diff_tmq):
     pc_levels = np.linspace(-10, 10, 11)
@@ -442,6 +439,7 @@ def plot_prect_tmq(ax, diff_prect, diff_tmq):
     ax.clabel(mc, inline=True, fontsize=6, fmt='%1.1f', colors='limegreen')
     return pc
 
+################################################################################
 
 ## Helper Functions for Figure 4 ##
 def plot_linregress(x, y, ax, color, linewidth=1):
@@ -457,7 +455,6 @@ def plot_linregress(x, y, ax, color, linewidth=1):
     ax.plot(x_fit, y_fit, color=color, linestyle='-', linewidth=linewidth, zorder=10)
     
     return slope
-
 
 def annotate_slope(ax, x_data, y_data, x_pos, label_color, label=True):
     """Plot linear regression (linear least squared) and annotate slope."""
@@ -492,6 +489,9 @@ def plot_enso_asymmetry_scatter(ax, elnino_sst, elnino_pre, lanina_sst, lanina_p
     """Plot scatter points for El Niño and La Niña events."""
     ax.scatter(elnino_sst, elnino_pre, marker='o', edgecolors=el_color, facecolors=el_color, s=6, linewidths=0.25, alpha=1, zorder=5)
     ax.scatter(lanina_sst, lanina_pre, marker='o', edgecolors=la_color, facecolors=la_color, s=6, linewidths=0.25, alpha=1, zorder=5)
+
+
+################################################################################
 
 # Figure 5
 def plot_sst_trends_spatial(slope, ax, num_years, levels):

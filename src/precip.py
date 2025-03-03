@@ -9,7 +9,6 @@ Functions for subsetting precipitation output in MSEA region.
 import xarray as xr
 from src import utils
 
-
 def get_SEAM_map(precip_da: xr.DataArray, monthly=False, detrend=False,
                      base_start=None, base_end=None,
                      anomaly=False):

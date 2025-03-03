@@ -8,10 +8,9 @@ Functions for dealing with CESM large ensemble output.
 
 from concurrent.futures import ProcessPoolExecutor
 
-import numpy as np
-import pandas as pd
-import xarray as xr
 import cftime
+import numpy as np
+import xarray as xr
 
 from src import utils
 from src.inputs import *
@@ -158,23 +157,6 @@ def time_set_midmonth(ds, time_name, deep=False):
     newtime = [cftime.DatetimeNoLeap(year[i], month[i], 15) for i in range(nmonths)]
     ds[time_name] = newtime
     return ds
-
-
-def convert_mms_to_mmmonth(da):
-    """Convert xr.DataArray precip in mm/s to mm/month for CESM's 365-day no leap calendar."""
-
-    seconds_in_month = [2678400, 2419200, 2678400, 2592000, 2678400, 2592000, 2678400,
-        2678400, 2592000, 2678400, 2592000, 2678400]
-    time_index = pd.date_range('2000-01', '2001-01', freq='M')
-    seconds_in_month_da = xr.DataArray(seconds_in_month, dims='time', coords={'time': time_index})
-
-    seconds_in_month_da = seconds_in_month_da.rename({'time': 'month'})
-    seconds_in_month_da['month'] = np.arange(1, 13)
-
-    new_da0 = da.groupby('time.month')*seconds_in_month_da
-    new_da = new_da0*1000
-
-    return new_da
 
 
 def process_cesm_member(ensemble_member, cesm_directory, file_suffix, anomaly=True):
